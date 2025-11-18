@@ -1,27 +1,26 @@
-/*! bc-i18n-custom.js | TVO Media Education Group | Localization overrides for Video.js core + custom labels
-   Notes:
-   - Loads as a "Custom plugin URL" in Brightcove Studio (place *after* other plugins).
-   - Registers a plugin `bcI18nOverride` that applies language after player + plugins initialize.
-   - Preserves per-embed `?language=xx` while allowing you to set a player-level default in Studio JSON.
+/*! bc-i18n-custom.js | Localization overrides + browser-language auto-select
+   Author: TVO Media Education Group
+   Behavior:
+   - Registers DE/FR/ES/JA strings (Video.js core + custom "Transcript" labels).
+   - Auto-selects language from browser; supports region → base mapping (fr-CA ⇒ fr).
+   - Honors existing selection via ?language=xx or player JSON "language".
+   - Fallback to English ("en") if browser language is not fr/es/de/ja.
 */
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
-    // AMD
     define(['video.js'], function (videojs) { return factory(videojs); });
   } else if (typeof module === 'object' && module.exports) {
-    // CommonJS
     module.exports = factory(require('video.js'));
   } else {
-    // Browser global
     root.bcI18nCustom = factory(root.videojs);
   }
 }(this, function (videojs) {
   'use strict';
-
-  // Abort early if Video.js is not available yet
   if (!videojs) { return; }
 
-  // --- 1) Define/override language packs -------------------------------
+  // ---------------------------------------------------------------------------
+  // 1) Language packs (override Video.js core + add custom transcript labels)
+  // ---------------------------------------------------------------------------
 
   // German
   videojs.addLanguage('de', {
@@ -91,53 +90,110 @@
     "Hide Transcript": "トランスクリプトを隠す"
   });
 
-  // --- 2) Register a tiny plugin that applies language at the right time ----
+  // ---------------------------------------------------------------------------
+  // 2) Plugin: detect browser language, set the player language with fallback
+  // ---------------------------------------------------------------------------
 
-  // Plugin name used in Studio JSON
   var PLUGIN_NAME = 'bcI18nOverride';
-
-  // Guard for both registerPlugin (v7+) and plugin() (very old v5/6)
   var register = videojs.registerPlugin || videojs.plugin;
   if (!register) { return; }
+
+  // Utility: parse the browser language list to a prioritized array of codes
+  function getBrowserLocales() {
+    var list = [];
+    if (Array.isArray(navigator.languages) && navigator.languages.length) {
+      list = navigator.languages.slice(0);
+    } else if (navigator.language) {
+      list = [navigator.language];
+    } else if (navigator.userLanguage) { // IE legacy
+      list = [navigator.userLanguage];
+    }
+    // Normalize: to lower-case and with dash separator
+    return list
+      .filter(Boolean)
+      .map(function (l) { return String(l).replace('_', '-').toLowerCase(); });
+  }
+
+  // Utility: for a locale like "fr-ca", return ["fr-ca", "fr"]
+  function expandLocaleCandidates(locale) {
+    var parts = String(locale || '').split('-');
+    if (!parts.length) return [];
+    var candidates = [];
+    // full tag first
+    candidates.push(parts.join('-'));
+    // progressively shorter base tags
+    while (parts.length > 1) {
+      parts.pop();
+      candidates.push(parts.join('-'));
+    }
+    return candidates;
+  }
+
+  // Resolve best locale in supported set; otherwise null
+  function resolveSupportedLocale(supportedSet, locales) {
+    for (var i = 0; i < locales.length; i++) {
+      var loc = locales[i];
+      var candidates = expandLocaleCandidates(loc);
+      for (var j = 0; j < candidates.length; j++) {
+        var c = candidates[j];
+        if (supportedSet.has(c)) return c;
+        // Also check base language only (e.g., "fr" from "fr-ca")
+        var base = c.split('-')[0];
+        if (supportedSet.has(base)) return base;
+      }
+    }
+    return null;
+  }
 
   register.call(videojs, PLUGIN_NAME, function pluginFn(options) {
     var player = this;
 
-    // Options you might set in Studio JSON later if required
+    // Defaults; you can override in Studio JSON if ever needed
     var defaults = {
-      // If you want a fallback default here (usually leave null so Studio JSON or ?language wins)
-      defaultLanguage: null   // e.g., "de" if you want the plugin to force a fallback
+      // Only these will be auto-selected from browser language
+      supported: ['fr', 'es', 'de', 'ja'],
+      // Final fallback if nothing matches (English)
+      fallback: 'en',
+      // Set to true to log decisions in the console for debugging during rollout
+      debug: false
     };
     var cfg = Object.assign({}, defaults, options || {});
+    var supportedSet = new Set((cfg.supported || []).map(function (s) { return String(s).toLowerCase(); }));
+    var fallback = String(cfg.fallback || 'en').toLowerCase();
 
-    // Apply language after the player + plugins are ready
-    player.ready(function onReady() {
+    player.ready(function () {
       try {
-        // If Brightcove/Video.js already established a language (Studio "language" or ?language=xx), keep it.
-        var currentLang = (typeof player.language === 'function') ? player.language() : null;
-
-        if (!currentLang && cfg.defaultLanguage) {
-          player.language(cfg.defaultLanguage);
+        // 1) If a language is already set (via ?language=xx or player JSON), respect it
+        var current = (typeof player.language === 'function') ? player.language() : null;
+        if (current) {
+          if (cfg.debug) { console.info('[bcI18nOverride] keeping existing language:', current); }
+          return;
         }
 
-        // Nothing else to do; strings defined above are now the active translations.
-        // If you need to adjust *after* fullscreen/PiP plugin init, you can defer to the next tick:
-        // setTimeout(function(){ player.trigger('languagechange'); }, 0);
+        // 2) Detect from browser preferences
+        var browserLocales = getBrowserLocales();
+        var best = resolveSupportedLocale(supportedSet, browserLocales);
 
+        // 3) Choose best supported or fallback to 'en'
+        var chosen = best || fallback;
+
+        if (cfg.debug) {
+          console.info('[bcI18nOverride] browserLocales=', browserLocales,
+                       'bestSupported=', best, 'chosen=', chosen);
+        }
+
+        // 4) Apply to the player
+        if (typeof player.language === 'function') {
+          player.language(chosen);
+          // Trigger a languagechange to refresh any custom controls that listen for it
+          player.trigger('languagechange');
+        }
       } catch (e) {
-        // Fail silently; localization should not break playback
-        // console.warn('[bcI18nOverride] error applying language', e);
+        // Fail-safe: never break playback because of i18n
+        if (cfg.debug) { console.warn('[bcI18nOverride] error applying language', e); }
       }
     });
-
-    // Optional: If your transcript control toggles label text at runtime and listens for `languagechange`,
-    // it will re-pull `player.localize('Display Transcript')`. If not, you can force a refresh by:
-    // player.on('bc-transcript-toggle', () => player.trigger('languagechange'));
   });
 
-  // Return a tiny API in case someone wants to inspect from console
-  return {
-    name: PLUGIN_NAME,
-    version: '1.0.0'
-  };
-}));
+  // Optional: expose a tiny API for console inspection
+  return { name: PLUGIN_NAME, version: '1.1.0' };
