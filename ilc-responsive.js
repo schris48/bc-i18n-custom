@@ -1,4 +1,3 @@
-
 videojs.registerPlugin('ilcResponsivePlugin', function() {
   var ilcVideoPlayer = this;
 
