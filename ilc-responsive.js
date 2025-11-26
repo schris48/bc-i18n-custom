@@ -1,4 +1,4 @@
-/*! bc-i18n-custom.js | Localization overrides + browser-language auto-select
+/*! ilc-responsive.js | Responsive + Localization enhancements
    Author: TVO Media Education Group
    Behavior:
    - Registers DE/FR/ES/JA strings (Video.js core + custom "Transcript" labels).
@@ -159,27 +159,35 @@
         var current = (typeof player.language === 'function') ? player.language() : null;
         if (current) {
           if (cfg.debug) console.info('[bcI18nOverride] Keeping existing language:', current);
-          return;
-        }
+        } else {
+          var browserLocales = getBrowserLocales();
+          var best = resolveSupportedLocale(supportedSet, browserLocales);
+          var chosen = best || fallback;
 
-        var browserLocales = getBrowserLocales();
-        var best = resolveSupportedLocale(supportedSet, browserLocales);
-        var chosen = best || fallback;
+          if (cfg.debug) {
+            console.info('[bcI18nOverride] Browser locales:', browserLocales);
+            console.info('[bcI18nOverride] Best match:', best, 'Chosen:', chosen);
+          }
 
-        if (cfg.debug) {
-          console.info('[bcI18nOverride] Browser locales:', browserLocales);
-          console.info('[bcI18nOverride] Best match:', best, 'Chosen:', chosen);
-        }
-
-        if (typeof player.language === 'function') {
-          player.language(chosen);
-          console.log('[bcI18nOverride] Player language set to:', chosen);
-          player.trigger('languagechange');
+          if (typeof player.language === 'function') {
+            player.language(chosen);
+            console.log('[bcI18nOverride] Player language set to:', chosen);
+            player.trigger('languagechange');
+          }
         }
 
         // ✅ Debug dictionary injection check
-        var dict = videojs.options.languages[chosen] || videojs.options.languages[chosen.split('-')[0]];
-        console.log('[bcI18nOverride] Dictionary for', chosen, ':', dict);
+        var dict = videojs.options.languages[player.language()] || videojs.options.languages[player.language().split('-')[0]];
+        console.log('[bcI18nOverride] Dictionary for', player.language(), ':', dict);
+
+        // ✅ Dynamic update for custom transcript buttons
+        player.on('languagechange', function () {
+          var btn = document.querySelector('.vjs-transcript-control .vjs-control-text');
+          if (btn) btn.textContent = player.localize('Display Transcript');
+
+          var hideBtn = document.querySelector('.bcRtnButton');
+          if (hideBtn) hideBtn.textContent = player.localize('Hide Transcript');
+        });
 
       } catch (e) {
         console.warn('[bcI18nOverride] Error applying language:', e);
@@ -188,3 +196,4 @@
   });
 
   return { name: PLUGIN_NAME, version: '1.1.0' };
+});
