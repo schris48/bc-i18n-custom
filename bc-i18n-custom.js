@@ -160,6 +160,16 @@
 
         // ✅ Trigger languagechange
         player.trigger('languagechange');
+
+        // ✅ Dynamic update for custom transcript buttons
+        player.on('languagechange', function () {
+          var btn = document.querySelector('.vjs-transcript-control .vjs-control-text');
+          if (btn) btn.textContent = player.localize('Display Transcript');
+
+          var hideBtn = document.querySelector('.bcRtnButton');
+          if (hideBtn) hideBtn.textContent = player.localize('Hide Transcript');
+        });
+
       } catch (e) {
         console.warn('[bcI18nOverride] error applying language', e);
       }
@@ -167,4 +177,3 @@
   });
 
   return { name: PLUGIN_NAME, version: '1.2.0' };
-});
