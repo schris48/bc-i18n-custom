@@ -1,11 +1,4 @@
-/*! bc-i18n-custom.js | Localization overrides + browser-language auto-select
-   Author: TVO Media Education Group
-   Behavior:
-   - Registers DE/FR/ES/JA strings (Video.js core + custom "Transcript" labels).
-   - Auto-selects language from browser; supports region → base mapping (fr-CA ⇒ fr).
-   - Honors existing selection via ?language=xx or player JSON "language".
-   - Fallback to English ("en") if browser language is not fr/es/de/ja.
-*/
+/*! bc-i18n-custom.js | Localization overrides + browser-language auto-select */
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
     define(['video.js'], function (videojs) { return factory(videojs); });
@@ -21,8 +14,6 @@
   // ---------------------------------------------------------------------------
   // 1) Language packs (override Video.js core + add custom transcript labels)
   // ---------------------------------------------------------------------------
-
-  // German
   videojs.addLanguage('de', {
     "Play": "Wiedergabe",
     "Pause": "Pause",
@@ -39,7 +30,6 @@
     "Hide Transcript": "Transkript ausblenden"
   });
 
-  // French
   videojs.addLanguage('fr', {
     "Play": "Lecture",
     "Pause": "Pause",
@@ -56,7 +46,6 @@
     "Hide Transcript": "Masquer la transcription"
   });
 
-  // Spanish
   videojs.addLanguage('es', {
     "Play": "Reproducir",
     "Pause": "Pausa",
@@ -73,7 +62,6 @@
     "Hide Transcript": "Ocultar transcripción"
   });
 
-  // Japanese
   videojs.addLanguage('ja', {
     "Play": "再生",
     "Pause": "一時停止",
@@ -93,35 +81,27 @@
   // ---------------------------------------------------------------------------
   // 2) Plugin: detect browser language, set the player language with fallback
   // ---------------------------------------------------------------------------
-
   var PLUGIN_NAME = 'bcI18nOverride';
   var register = videojs.registerPlugin || videojs.plugin;
   if (!register) { return; }
 
-  // Utility: parse the browser language list to a prioritized array of codes
   function getBrowserLocales() {
     var list = [];
     if (Array.isArray(navigator.languages) && navigator.languages.length) {
       list = navigator.languages.slice(0);
     } else if (navigator.language) {
       list = [navigator.language];
-    } else if (navigator.userLanguage) { // IE legacy
+    } else if (navigator.userLanguage) {
       list = [navigator.userLanguage];
     }
-    // Normalize: to lower-case and with dash separator
-    return list
-      .filter(Boolean)
-      .map(function (l) { return String(l).replace('_', '-').toLowerCase(); });
+    return list.map(function (l) { return String(l).replace('_', '-').toLowerCase(); });
   }
 
-  // Utility: for a locale like "fr-ca", return ["fr-ca", "fr"]
   function expandLocaleCandidates(locale) {
     var parts = String(locale || '').split('-');
     if (!parts.length) return [];
     var candidates = [];
-    // full tag first
     candidates.push(parts.join('-'));
-    // progressively shorter base tags
     while (parts.length > 1) {
       parts.pop();
       candidates.push(parts.join('-'));
@@ -129,7 +109,6 @@
     return candidates;
   }
 
-  // Resolve best locale in supported set; otherwise null
   function resolveSupportedLocale(supportedSet, locales) {
     for (var i = 0; i < locales.length; i++) {
       var loc = locales[i];
@@ -137,7 +116,6 @@
       for (var j = 0; j < candidates.length; j++) {
         var c = candidates[j];
         if (supportedSet.has(c)) return c;
-        // Also check base language only (e.g., "fr" from "fr-ca")
         var base = c.split('-')[0];
         if (supportedSet.has(base)) return base;
       }
@@ -147,53 +125,46 @@
 
   register.call(videojs, PLUGIN_NAME, function pluginFn(options) {
     var player = this;
-
-    // Defaults; you can override in Studio JSON if ever needed
     var defaults = {
-      // Only these will be auto-selected from browser language
       supported: ['fr', 'es', 'de', 'ja'],
-      // Final fallback if nothing matches (English)
       fallback: 'en',
-      // Set to true to log decisions in the console for debugging during rollout
-      debug: false
+      debug: true // ✅ Turn on debug for troubleshooting
     };
     var cfg = Object.assign({}, defaults, options || {});
-    var supportedSet = new Set((cfg.supported || []).map(function (s) { return String(s).toLowerCase(); }));
+    var supportedSet = new Set(cfg.supported.map(function (s) { return String(s).toLowerCase(); }));
     var fallback = String(cfg.fallback || 'en').toLowerCase();
 
     player.ready(function () {
       try {
-        // 1) If a language is already set (via ?language=xx or player JSON), respect it
         var current = (typeof player.language === 'function') ? player.language() : null;
         if (current) {
-          if (cfg.debug) { console.info('[bcI18nOverride] keeping existing language:', current); }
-          return;
+          if (cfg.debug) console.info('[bcI18nOverride] keeping existing language:', current);
+        } else {
+          var browserLocales = getBrowserLocales();
+          var best = resolveSupportedLocale(supportedSet, browserLocales);
+          var chosen = best || fallback;
+          if (cfg.debug) console.info('[bcI18nOverride] browserLocales=', browserLocales, 'chosen=', chosen);
+          if (typeof player.language === 'function') {
+            player.language(chosen);
+          }
         }
 
-        // 2) Detect from browser preferences
-        var browserLocales = getBrowserLocales();
-        var best = resolveSupportedLocale(supportedSet, browserLocales);
-
-        // 3) Choose best supported or fallback to 'en'
-        var chosen = best || fallback;
-
-        if (cfg.debug) {
-          console.info('[bcI18nOverride] browserLocales=', browserLocales,
-                       'bestSupported=', best, 'chosen=', chosen);
+        // ✅ Inject dictionary into player options for custom keys
+        var lang = player.language();
+        var dict = videojs.options.languages[lang] || videojs.options.languages[lang.split('-')[0]];
+        if (dict) {
+          player.options_.languages = player.options_.languages || {};
+          player.options_.languages[lang] = Object.assign({}, player.options_.languages[lang] || {}, dict);
+          if (cfg.debug) console.info('[bcI18nOverride] injected dict for', lang, dict);
         }
 
-        // 4) Apply to the player
-        if (typeof player.language === 'function') {
-          player.language(chosen);
-          // Trigger a languagechange to refresh any custom controls that listen for it
-          player.trigger('languagechange');
-        }
+        // ✅ Trigger languagechange
+        player.trigger('languagechange');
       } catch (e) {
-        // Fail-safe: never break playback because of i18n
-        if (cfg.debug) { console.warn('[bcI18nOverride] error applying language', e); }
+        console.warn('[bcI18nOverride] error applying language', e);
       }
     });
   });
 
-  // Optional: expose a tiny API for console inspection
-  return { name: PLUGIN_NAME, version: '1.1.0' };
+  return { name: PLUGIN_NAME, version: '1.2.0' };
+});
