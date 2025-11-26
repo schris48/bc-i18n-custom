@@ -1,16 +1,7 @@
 videojs.registerPlugin('ilcResponsivePlugin', function() {
   var ilcVideoPlayer = this;
-
-  // Remove picture-in-picture button
-  var pip_control = ilcVideoPlayer.el().getElementsByClassName("vjs-picture-in-picture-control")[0];
-  if (pip_control) {
-    pip_control.parentNode.removeChild(pip_control);
-  }
-
-  // Variables for custom elements (declared outside so update function can access them)
   var bcTxtButton, bcSpanText, bcRtnButton;
 
-  // ✅ Function to update labels dynamically based on current language
   function updateTranscriptLabels() {
     if (bcSpanText && bcTxtButton && bcRtnButton) {
       bcSpanText.textContent = ilcVideoPlayer.localize('Display Transcript');
@@ -20,16 +11,14 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
     }
   }
 
-  // ✅ Register listener early so it catches languagechange from bc-i18n-custom.js
+  // ✅ Always refresh when language changes
   ilcVideoPlayer.on('languagechange', updateTranscriptLabels);
 
-  // Initialize player
   ilcVideoPlayer.on('loadstart', function() {
     var numTracks = ilcVideoPlayer.mediainfo.textTracks.length;
 
     for (var i = 0; i < numTracks; i++) {
       if (ilcVideoPlayer.mediainfo.textTracks[i].kind === "metadata") {
-
         // Create transcript button
         bcTxtButton = document.createElement('button');
         bcTxtButton.className = 'vjs-transcript-control vjs-control vjs-button';
@@ -45,12 +34,11 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         bcSpanText.className = 'vjs-control-text';
         bcSpanText.setAttribute('aria-live', 'polite');
 
-        // Append elements
         bcTxtButton.appendChild(bcSpanPlaceholder);
         bcTxtButton.appendChild(bcSpanText);
         $(ilcVideoPlayer.controlBar.customControlSpacer.el()).html(bcTxtButton);
 
-        // Create transcript container + return button
+        // Create transcript container
         var bcTextContainer = document.createElement('div');
         var bcTextContent = document.createElement('div');
         var bcTextFooter = document.createElement('div');
@@ -77,45 +65,36 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
           bcTextContent.innerHTML = newdata;
         });
 
-        // Hide transcript button in fullscreen
+        // Fullscreen toggle
         ilcVideoPlayer.on('fullscreenchange', function() {
-          if (ilcVideoPlayer.isFullscreen()) {
-            bcTxtButton.style.visibility = "hidden";
-            bcTxtButton.setAttribute('aria-hidden', 'true');
-          } else {
-            bcTxtButton.style.visibility = "visible";
-            bcTxtButton.setAttribute('aria-hidden', 'false');
-          }
+          bcTxtButton.style.visibility = ilcVideoPlayer.isFullscreen() ? "hidden" : "visible";
+          bcTxtButton.setAttribute('aria-hidden', ilcVideoPlayer.isFullscreen());
         });
 
         // Show transcript
         $(bcTxtButton).click(function() {
           ilcVideoPlayer.pause();
           ilcVideoPlayer.el().style.display = "none";
-          ilcVideoPlayer.el().setAttribute('aria-hidden', 'true');
           bcTextContainer.style.display = "block";
-          bcTextContainer.setAttribute('aria-hidden', 'false');
           bcTextContent.focus();
         });
 
         // Hide transcript
         $(bcRtnButton).click(function() {
           bcTextContainer.style.display = "none";
-          bcTextContainer.setAttribute('aria-hidden', 'true');
           ilcVideoPlayer.el().style.display = "block";
-          ilcVideoPlayer.el().setAttribute('aria-hidden', 'false');
           bcTxtButton.focus();
         });
 
         // ✅ Initial label set
         updateTranscriptLabels();
 
-        // ✅ Force refresh after player ready (covers timing issues)
+        // ✅ Force refresh after player ready (language override happens here)
         ilcVideoPlayer.ready(function() {
           updateTranscriptLabels();
         });
 
-        break; // Stop after first metadata track
+        break;
       }
     }
   });
