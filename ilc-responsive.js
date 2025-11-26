@@ -1,24 +1,76 @@
+
+/* ilc-responsive.js
+   - Creates a transcript toggle button and overlay.
+   - Robust i18n: resolves labels from player/global dictionaries with base-language fallback.
+   - Updates on languagechange and player ready.
+*/
+
 videojs.registerPlugin('ilcResponsivePlugin', function() {
   var ilcVideoPlayer = this;
-  var bcTxtButton, bcSpanText, bcRtnButton;
 
-  function updateTranscriptLabels() {
-    if (bcSpanText && bcTxtButton && bcRtnButton) {
-      bcSpanText.textContent = ilcVideoPlayer.localize('Display Transcript');
-      bcTxtButton.title = ilcVideoPlayer.localize('Display Transcript');
-      bcRtnButton.textContent = ilcVideoPlayer.localize('Hide Transcript');
-      bcRtnButton.title = ilcVideoPlayer.localize('Hide Transcript');
-    }
+  // Remove picture-in-picture button (if present)
+  var pip_control = ilcVideoPlayer.el().getElementsByClassName("vjs-picture-in-picture-control")[0];
+  if (pip_control && pip_control.parentNode) {
+    pip_control.parentNode.removeChild(pip_control);
   }
 
-  // ✅ Always refresh when language changes
+  // Custom elements (declared up-front so updater can access them)
+  var bcTxtButton, bcSpanText, bcRtnButton, bcTextContainer, bcTextContent;
+
+  // ---- i18n helpers ---------------------------------------------------------
+
+  function getCurrentLang() {
+    // Returns normalized current language, e.g. "fr-ca" or "fr"
+    var lang = (typeof ilcVideoPlayer.language === 'function') ? ilcVideoPlayer.language() : 'en';
+    return String(lang || 'en').toLowerCase();
+  }
+
+  function getBaseLang(lang) {
+    // "fr-ca" -> "fr"
+    lang = String(lang || '').toLowerCase();
+    return lang.split('-')[0] || lang;
+  }
+
+  function getLanguageDict(lang) {
+    // Try player-level languages first, then fall back to global videojs languages
+    var playerLangs = (ilcVideoPlayer.options_ && ilcVideoPlayer.options_.languages) || {};
+    var globalLangs = (videojs.options && videojs.options.languages) || {};
+
+    // Prefer full tag, then base tag
+    var base = getBaseLang(lang);
+    return playerLangs[lang] || playerLangs[base] || globalLangs[lang] || globalLangs[base] || {};
+  }
+
+  function resolveLabel(key) {
+    // Resolve localized label with graceful fallback to English key string
+    var lang = getCurrentLang();
+    var dict = getLanguageDict(lang);
+    return (dict && dict[key]) || key;
+  }
+
+  function updateTranscriptLabels() {
+    if (!bcSpanText || !bcTxtButton || !bcRtnButton) return;
+
+    var showLabel = resolveLabel('Display Transcript');
+    var hideLabel = resolveLabel('Hide Transcript');
+
+    bcSpanText.textContent = showLabel;
+    bcTxtButton.title = showLabel;
+    bcRtnButton.textContent = hideLabel;
+    bcRtnButton.title = hideLabel;
+  }
+
+  // Listen early so we catch language changes triggered by bc-i18n-custom.js
   ilcVideoPlayer.on('languagechange', updateTranscriptLabels);
 
+  // ---- UI creation ----------------------------------------------------------
+
   ilcVideoPlayer.on('loadstart', function() {
-    var numTracks = ilcVideoPlayer.mediainfo.textTracks.length;
+    var tracks = (ilcVideoPlayer.mediainfo && ilcVideoPlayer.mediainfo.textTracks) || [];
+    var numTracks = tracks.length;
 
     for (var i = 0; i < numTracks; i++) {
-      if (ilcVideoPlayer.mediainfo.textTracks[i].kind === "metadata") {
+      if (tracks[i].kind === "metadata") {
         // Create transcript button
         bcTxtButton = document.createElement('button');
         bcTxtButton.className = 'vjs-transcript-control vjs-control vjs-button';
@@ -36,19 +88,29 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
 
         bcTxtButton.appendChild(bcSpanPlaceholder);
         bcTxtButton.appendChild(bcSpanText);
-        $(ilcVideoPlayer.controlBar.customControlSpacer.el()).html(bcTxtButton);
 
-        // Create transcript container
-        var bcTextContainer = document.createElement('div');
-        var bcTextContent = document.createElement('div');
+        // IMPORTANT: append without nuking the spacer component (avoid .html(...))
+        var spacerEl = ilcVideoPlayer.controlBar && ilcVideoPlayer.controlBar.customControlSpacer && ilcVideoPlayer.controlBar.customControlSpacer.el();
+        if (spacerEl) {
+          // Remove prior instance if re-running on subsequent loadstart
+          var existing = spacerEl.querySelector('.vjs-transcript-control');
+          if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+          spacerEl.appendChild(bcTxtButton);
+        }
+
+        // Create transcript container + return button
+        bcTextContainer = document.createElement('div');
+        bcTextContent = document.createElement('div');
         var bcTextFooter = document.createElement('div');
         bcRtnButton = document.createElement('button');
 
         bcTextContainer.style.display = "none";
         bcTextContainer.setAttribute('aria-hidden', 'true');
         bcTextContainer.className = 'bcTextContainer';
+
         bcTextContent.className = 'bcTextContent';
         bcTextContent.setAttribute('tabindex', '0');
+
         bcTextFooter.className = 'bcTextFooter';
         bcRtnButton.className = 'bcRtnButton';
         bcRtnButton.setAttribute('type', 'button');
@@ -56,46 +118,83 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         bcTextFooter.appendChild(bcRtnButton);
         bcTextContainer.appendChild(bcTextContent);
         bcTextContainer.appendChild(bcTextFooter);
-        $(bcTextContainer).insertAfter(ilcVideoPlayer.el());
 
-        // Load transcript text
-        var url = ilcVideoPlayer.mediainfo.textTracks[i].src;
-        $.get(url, function(data) {
-          var newdata = data.slice(data.indexOf("-->") + 16);
-          bcTextContent.innerHTML = newdata;
-        });
+        // Insert immediately after the player root
+        var playerRoot = ilcVideoPlayer.el();
+        if (playerRoot && playerRoot.parentNode) {
+          playerRoot.parentNode.insertBefore(bcTextContainer, playerRoot.nextSibling);
+        }
 
-        // Fullscreen toggle
+        // Load transcript text from metadata track src
+        var url = tracks[i].src;
+        if (url && window.$ && $.get) {
+          $.get(url, function(data) {
+            // Extract everything after the first "-->" timestamp line (your original behavior)
+            var idx = (data || '').indexOf("-->");
+            var newdata = idx >= 0 ? data.slice(idx + 16) : data;
+            bcTextContent.innerHTML = newdata;
+          });
+        }
+
+        // Hide transcript button in fullscreen
         ilcVideoPlayer.on('fullscreenchange', function() {
-          bcTxtButton.style.visibility = ilcVideoPlayer.isFullscreen() ? "hidden" : "visible";
-          bcTxtButton.setAttribute('aria-hidden', ilcVideoPlayer.isFullscreen());
+          var isFs = ilcVideoPlayer.isFullscreen();
+          bcTxtButton.style.visibility = isFs ? "hidden" : "visible";
+          bcTxtButton.setAttribute('aria-hidden', isFs ? 'true' : 'false');
         });
 
         // Show transcript
-        $(bcTxtButton).click(function() {
-          ilcVideoPlayer.pause();
-          ilcVideoPlayer.el().style.display = "none";
-          bcTextContainer.style.display = "block";
-          bcTextContent.focus();
-        });
+        if (window.$) {
+          $(bcTxtButton).off('click.ilcTranscript').on('click.ilcTranscript', function() {
+            ilcVideoPlayer.pause();
+            ilcVideoPlayer.el().style.display = "none";
+            ilcVideoPlayer.el().setAttribute('aria-hidden', 'true');
+            bcTextContainer.style.display = "block";
+            bcTextContainer.setAttribute('aria-hidden', 'false');
+            bcTextContent.focus();
+          });
+        } else {
+          bcTxtButton.addEventListener('click', function() {
+            ilcVideoPlayer.pause();
+            ilcVideoPlayer.el().style.display = "none";
+            ilcVideoPlayer.el().setAttribute('aria-hidden', 'true');
+            bcTextContainer.style.display = "block";
+            bcTextContainer.setAttribute('aria-hidden', 'false');
+            bcTextContent.focus();
+          });
+        }
 
         // Hide transcript
-        $(bcRtnButton).click(function() {
-          bcTextContainer.style.display = "none";
-          ilcVideoPlayer.el().style.display = "block";
-          bcTxtButton.focus();
-        });
+        if (window.$) {
+          $(bcRtnButton).off('click.ilcTranscript').on('click.ilcTranscript', function() {
+            bcTextContainer.style.display = "none";
+            bcTextContainer.setAttribute('aria-hidden', 'true');
+            ilcVideoPlayer.el().style.display = "block";
+            ilcVideoPlayer.el().setAttribute('aria-hidden', 'false');
+            bcTxtButton.focus();
+          });
+        } else {
+          bcRtnButton.addEventListener('click', function() {
+            bcTextContainer.style.display = "none";
+            bcTextContainer.setAttribute('aria-hidden', 'true');
+            ilcVideoPlayer.el().style.display = "block";
+            ilcVideoPlayer.el().setAttribute('aria-hidden', 'false');
+            bcTxtButton.focus();
+          });
+        }
 
-        // ✅ Initial label set
+        // Initial labels
         updateTranscriptLabels();
 
-        // ✅ Force refresh after player ready (language override happens here)
+        // After player is ready, update again (covers race with language override)
         ilcVideoPlayer.ready(function() {
           updateTranscriptLabels();
+
+          // Also schedule a microtask update in case language settles one tick later
+          setTimeout(updateTranscriptLabels, 0);
         });
 
-        break;
+        break; // Stop after the first metadata track
       }
     }
   });
-});
