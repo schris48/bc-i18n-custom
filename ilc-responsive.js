@@ -29,10 +29,7 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         bcSpanText.className = 'vjs-control-text';
         bcSpanText.setAttribute('aria-live', 'polite');
 
-        // Initial localized label
-        bcSpanText.textContent = ilcVideoPlayer.localize('Display Transcript');
-        bcTxtButton.setAttribute('title', ilcVideoPlayer.localize('Display Transcript'));
-
+        // Append elements
         bcTxtButton.appendChild(bcSpanPlaceholder);
         bcTxtButton.appendChild(bcSpanText);
         $(ilcVideoPlayer.controlBar.customControlSpacer.el()).html(bcTxtButton);
@@ -51,10 +48,6 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         bcTextFooter.className = 'bcTextFooter';
         bcRtnButton.className = 'bcRtnButton';
         bcRtnButton.setAttribute('type', 'button');
-
-        // Initial localized label
-        bcRtnButton.textContent = ilcVideoPlayer.localize('Hide Transcript');
-        bcRtnButton.setAttribute('title', ilcVideoPlayer.localize('Hide Transcript'));
 
         bcTextFooter.appendChild(bcRtnButton);
         bcTextContainer.appendChild(bcTextContent);
@@ -98,17 +91,24 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
           bcTxtButton.focus();
         });
 
-        // ✅ Dynamic language update
+        // ✅ Robust dynamic language update
         function updateTranscriptLabels() {
           bcSpanText.textContent = ilcVideoPlayer.localize('Display Transcript');
-          bcTxtButton.setAttribute('title', ilcVideoPlayer.localize('Display Transcript'));
+          bcTxtButton.title = ilcVideoPlayer.localize('Display Transcript');
           bcRtnButton.textContent = ilcVideoPlayer.localize('Hide Transcript');
-          bcRtnButton.setAttribute('title', ilcVideoPlayer.localize('Hide Transcript'));
+          bcRtnButton.title = ilcVideoPlayer.localize('Hide Transcript');
         }
 
-        // Initial set + listener
+        // Initial set
         updateTranscriptLabels();
+
+        // Listen for language changes
         ilcVideoPlayer.on('languagechange', updateTranscriptLabels);
+
+        // Force refresh after player is ready (covers initial override)
+        ilcVideoPlayer.ready(function() {
+          updateTranscriptLabels();
+        });
 
         break; // Stop after first metadata track
       }
