@@ -1,213 +1,121 @@
-/*! ilc-responsive.js | Responsive + Localization enhancements
-   Author: TVO Media Education Group
-   Behavior:
-   - Registers DE/FR/ES/JA strings (Video.js core + custom "Transcript" labels).
-   - Auto-selects language from browser; supports region → base mapping (fr-CA ⇒ fr).
-   - Honors existing selection via ?language=xx or player JSON "language".
-   - Fallback to English ("en") if browser language is not fr/es/de/ja.
-*/
-(function (root, factory) {
-  if (typeof define === 'function' && define.amd) {
-    define(['video.js'], function (videojs) { return factory(videojs); });
-  } else if (typeof module === 'object' && module.exports) {
-    module.exports = factory(require('video.js'));
-  } else {
-    root.bcI18nCustom = factory(root.videojs);
-  }
-}(this, function (videojs) {
-  'use strict';
-  if (!videojs) { return; }
+videojs.registerPlugin('ilcResponsivePlugin', function() {
+  var ilcVideoPlayer = this;
 
-  // ---------------------------------------------------------------------------
-  // 1) Language packs (override Video.js core + add custom transcript labels)
-  // ---------------------------------------------------------------------------
-
-  console.log('[bc-i18n-custom] Registering language packs...');
-
-  // German
-  videojs.addLanguage('de', {
-    "Play": "Wiedergabe",
-    "Pause": "Pause",
-    "Replay": "Erneut abspielen",
-    "Mute": "Stumm",
-    "Unmute": "Ton an",
-    "Volume Level": "Lautstärke",
-    "Fullscreen": "Vollbild",
-    "Exit Fullscreen": "Vollbild beenden",
-    "Captions": "Untertitel",
-    "captions settings": "Untertitel‑Einstellungen",
-    "captions off": "Untertitel aus",
-    "Display Transcript": "Transkript anzeigen",
-    "Hide Transcript": "Transkript ausblenden"
-  });
-
-  // French
-  videojs.addLanguage('fr', {
-    "Play": "Lecture",
-    "Pause": "Pause",
-    "Replay": "Rejouer",
-    "Mute": "Muet",
-    "Unmute": "Son activé",
-    "Volume Level": "Niveau sonore",
-    "Fullscreen": "Plein écran",
-    "Exit Fullscreen": "Quitter le plein écran",
-    "Captions": "Sous-titres",
-    "captions settings": "Paramètres des sous‑titres",
-    "captions off": "Sous‑titres désactivés",
-    "Display Transcript": "Afficher la transcription",
-    "Hide Transcript": "Masquer la transcription"
-  });
-
-  // Spanish
-  videojs.addLanguage('es', {
-    "Play": "Reproducir",
-    "Pause": "Pausa",
-    "Replay": "Repetir",
-    "Mute": "Silencio",
-    "Unmute": "Activar sonido",
-    "Volume Level": "Nivel de volumen",
-    "Fullscreen": "Pantalla completa",
-    "Exit Fullscreen": "Salir de pantalla completa",
-    "Captions": "Subtítulos",
-    "captions settings": "Configuración de subtítulos",
-    "captions off": "Subtítulos desactivados",
-    "Display Transcript": "Mostrar transcripción",
-    "Hide Transcript": "Ocultar transcripción"
-  });
-
-  // Japanese
-  videojs.addLanguage('ja', {
-    "Play": "再生",
-    "Pause": "一時停止",
-    "Replay": "もう一度再生",
-    "Mute": "ミュート",
-    "Unmute": "ミュート解除",
-    "Volume Level": "音量レベル",
-    "Fullscreen": "全画面表示",
-    "Exit Fullscreen": "全画面終了",
-    "Captions": "字幕",
-    "captions settings": "字幕設定",
-    "captions off": "字幕オフ",
-    "Display Transcript": "トランスクリプトを表示",
-    "Hide Transcript": "トランスクリプトを隠す"
-  });
-
-  console.log('[bc-i18n-custom] Language packs registered:', Object.keys(videojs.options.languages));
-
-  // ---------------------------------------------------------------------------
-  // 2) Plugin: detect browser language, set the player language with fallback
-  // ---------------------------------------------------------------------------
-
-  var PLUGIN_NAME = 'bcI18nOverride';
-  var register = videojs.registerPlugin || videojs.plugin;
-  if (!register) { return; }
-
-  function getBrowserLocales() {
-    var list = [];
-    if (Array.isArray(navigator.languages) && navigator.languages.length) {
-      list = navigator.languages.slice(0);
-    } else if (navigator.language) {
-      list = [navigator.language];
-    } else if (navigator.userLanguage) { // IE legacy
-      list = [navigator.userLanguage];
-    }
-    return list
-      .filter(Boolean)
-      .map(function (l) { return String(l).replace('_', '-').toLowerCase(); });
+  // Remove picture-in-picture button
+  var pip_control = ilcVideoPlayer.el().getElementsByClassName("vjs-picture-in-picture-control")[0];
+  if (pip_control) {
+    pip_control.parentNode.removeChild(pip_control);
   }
 
-  function expandLocaleCandidates(locale) {
-    var parts = String(locale || '').split('-');
-    if (!parts.length) return [];
-    var candidates = [];
-    candidates.push(parts.join('-'));
-    while (parts.length > 1) {
-      parts.pop();
-      candidates.push(parts.join('-'));
-    }
-    return candidates;
-  }
+  // Initialize player
+  ilcVideoPlayer.on('loadstart', function() {
+    var numTracks = ilcVideoPlayer.mediainfo.textTracks.length;
 
-  function resolveSupportedLocale(supportedSet, locales) {
-    for (var i = 0; i < locales.length; i++) {
-      var loc = locales[i];
-      var candidates = expandLocaleCandidates(loc);
-      for (var j = 0; j < candidates.length; j++) {
-        var c = candidates[j];
-        if (supportedSet.has(c)) return c;
-        var base = c.split('-')[0];
-        if (supportedSet.has(base)) return base;
-      }
-    }
-    return null;
-  }
+    for (var i = 0; i < numTracks; i++) {
+      if (ilcVideoPlayer.mediainfo.textTracks[i].kind === "metadata") {
 
-  register.call(videojs, PLUGIN_NAME, function pluginFn(options) {
-    var player = this;
+        // Create transcript button
+        var bcTxtButton = document.createElement('button');
+        bcTxtButton.className = 'vjs-transcript-control vjs-control vjs-button';
+        bcTxtButton.setAttribute('style', 'z-index:1');
+        bcTxtButton.setAttribute('type', 'button');
+        bcTxtButton.setAttribute('aria-disabled', 'false');
 
-    var defaults = {
-      supported: ['fr', 'es', 'de', 'ja'],
-      fallback: 'en',
-      debug: true // ✅ Enable debug
-    };
-    var cfg = Object.assign({}, defaults, options || {});
-    var supportedSet = new Set((cfg.supported || []).map(function (s) { return String(s).toLowerCase(); }));
-    var fallback = String(cfg.fallback || 'en').toLowerCase();
+        var bcSpanPlaceholder = document.createElement('span');
+        bcSpanPlaceholder.setAttribute('aria-hidden', 'true');
+        bcSpanPlaceholder.className = 'vjs-icon-placeholder';
 
-    player.ready(function () {
-      try {
-        var current = (typeof player.language === 'function') ? player.language() : null;
-        if (current) {
-          if (cfg.debug) console.info('[bcI18nOverride] Keeping existing language:', current);
-        } else {
-          var browserLocales = getBrowserLocales();
-          var best = resolveSupportedLocale(supportedSet, browserLocales);
-          var chosen = best || fallback;
+        var bcSpanText = document.createElement('span');
+        bcSpanText.className = 'vjs-control-text';
+        bcSpanText.setAttribute('aria-live', 'polite');
 
-          if (cfg.debug) {
-            console.info('[bcI18nOverride] Browser locales:', browserLocales);
-            console.info('[bcI18nOverride] Best match:', best, 'Chosen:', chosen);
-          }
+        // Initial localized label
+        bcSpanText.textContent = ilcVideoPlayer.localize('Display Transcript');
+        bcTxtButton.setAttribute('title', ilcVideoPlayer.localize('Display Transcript'));
 
-          if (typeof player.language === 'function') {
-            player.language(chosen);
-            console.log('[bcI18nOverride] Player language set to:', chosen);
-            player.trigger('languagechange');
-          }
-        }
+        bcTxtButton.appendChild(bcSpanPlaceholder);
+        bcTxtButton.appendChild(bcSpanText);
+        $(ilcVideoPlayer.controlBar.customControlSpacer.el()).html(bcTxtButton);
 
-        // ✅ Debug dictionary injection check
-        var dict = videojs.options.languages[player.language()] || videojs.options.languages[player.language().split('-')[0]];
-        console.log('[bcI18nOverride] Dictionary for', player.language(), ':', dict);
+        // Create transcript container + return button
+        var bcTextContainer = document.createElement('div');
+        var bcTextContent = document.createElement('div');
+        var bcTextFooter = document.createElement('div');
+        var bcRtnButton = document.createElement('button');
 
-        // ✅ Dynamic update for custom transcript buttons
-        function updateTranscriptLabels() {
-          var btn = document.querySelector('.vjs-transcript-control .vjs-control-text');
-          if (btn) btn.textContent = player.localize('Display Transcript');
+        bcTextContainer.style.display = "none";
+        bcTextContainer.setAttribute('aria-hidden', 'true');
+        bcTextContainer.className = 'bcTextContainer';
+        bcTextContent.className = 'bcTextContent';
+        bcTextContent.setAttribute('tabindex', '0');
+        bcTextFooter.className = 'bcTextFooter';
+        bcRtnButton.className = 'bcRtnButton';
+        bcRtnButton.setAttribute('type', 'button');
 
-          var hideBtn = document.querySelector('.bcRtnButton');
-          if (hideBtn) hideBtn.textContent = player.localize('Hide Transcript');
-        }
+        // Initial localized label
+        bcRtnButton.textContent = ilcVideoPlayer.localize('Hide Transcript');
+        bcRtnButton.setAttribute('title', ilcVideoPlayer.localize('Hide Transcript'));
 
-        // Update on language change
-        player.on('languagechange', updateTranscriptLabels);
+        bcTextFooter.appendChild(bcRtnButton);
+        bcTextContainer.appendChild(bcTextContent);
+        bcTextContainer.appendChild(bcTextFooter);
+        $(bcTextContainer).insertAfter(ilcVideoPlayer.el());
 
-        // Also update when overlay opens (click on transcript button)
-        document.addEventListener('click', function (e) {
-          if (e.target.classList.contains('vjs-transcript-control') || e.target.closest('.vjs-transcript-control')) {
-            setTimeout(updateTranscriptLabels, 100);
+        // Load transcript text
+        var url = ilcVideoPlayer.mediainfo.textTracks[i].src;
+        $.get(url, function(data) {
+          var newdata = data.slice(data.indexOf("-->") + 16);
+          bcTextContent.innerHTML = newdata;
+        });
+
+        // Hide transcript button in fullscreen
+        ilcVideoPlayer.on('fullscreenchange', function() {
+          if (ilcVideoPlayer.isFullscreen()) {
+            bcTxtButton.style.visibility = "hidden";
+            bcTxtButton.setAttribute('aria-hidden', 'true');
+          } else {
+            bcTxtButton.style.visibility = "visible";
+            bcTxtButton.setAttribute('aria-hidden', 'false');
           }
         });
 
-        // Fallback: observe DOM for late injection
+        // Show transcript
+        $(bcTxtButton).click(function() {
+          ilcVideoPlayer.pause();
+          ilcVideoPlayer.el().style.display = "none";
+          ilcVideoPlayer.el().setAttribute('aria-hidden', 'true');
+          bcTextContainer.style.display = "block";
+          bcTextContainer.setAttribute('aria-hidden', 'false');
+          bcTextContent.focus();
+        });
+
+        // Hide transcript
+        $(bcRtnButton).click(function() {
+          bcTextContainer.style.display = "none";
+          bcTextContainer.setAttribute('aria-hidden', 'true');
+          ilcVideoPlayer.el().style.display = "block";
+          ilcVideoPlayer.el().setAttribute('aria-hidden', 'false');
+          bcTxtButton.focus();
+        });
+
+        // ✅ Dynamic language update logic
+        function updateTranscriptLabels() {
+          bcSpanText.textContent = ilcVideoPlayer.localize('Display Transcript');
+          bcTxtButton.setAttribute('title', ilcVideoPlayer.localize('Display Transcript'));
+          bcRtnButton.textContent = ilcVideoPlayer.localize('Hide Transcript');
+          bcRtnButton.setAttribute('title', ilcVideoPlayer.localize('Hide Transcript'));
+        }
+
+        // Initial set + listener
+        updateTranscriptLabels();
+        ilcVideoPlayer.on('languagechange', updateTranscriptLabels);
+
+        // ✅ Extra enhancement: observe DOM for late changes (safety net)
         var observer = new MutationObserver(updateTranscriptLabels);
         observer.observe(document.body, { childList: true, subtree: true });
 
-      } catch (e) {
-        console.warn('[bcI18nOverride] Error applying language:', e);
+        break; // Stop after first metadata track
       }
-    });
+    }
   });
-
-  return { name: PLUGIN_NAME, version: '1.1.0' };
 });
