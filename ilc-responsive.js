@@ -1,3 +1,4 @@
+
 videojs.registerPlugin('ilcResponsivePlugin', function() {
   var ilcVideoPlayer = this;
 
@@ -29,8 +30,9 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         bcSpanText.className = 'vjs-control-text';
         bcSpanText.setAttribute('aria-live', 'polite');
 
-        // Use player.localize for initial label
+        // Initial localized label
         bcSpanText.textContent = ilcVideoPlayer.localize('Display Transcript');
+        bcTxtButton.setAttribute('title', ilcVideoPlayer.localize('Display Transcript'));
 
         bcTxtButton.appendChild(bcSpanPlaceholder);
         bcTxtButton.appendChild(bcSpanText);
@@ -51,8 +53,9 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         bcRtnButton.className = 'bcRtnButton';
         bcRtnButton.setAttribute('type', 'button');
 
-        // Use player.localize for initial label
+        // Initial localized label
         bcRtnButton.textContent = ilcVideoPlayer.localize('Hide Transcript');
+        bcRtnButton.setAttribute('title', ilcVideoPlayer.localize('Hide Transcript'));
 
         bcTextFooter.appendChild(bcRtnButton);
         bcTextContainer.appendChild(bcTextContent);
@@ -96,13 +99,20 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
           bcTxtButton.focus();
         });
 
-        // ✅ Update labels on language change
-        ilcVideoPlayer.on('languagechange', function() {
+        // ✅ Dynamic language update
+        function updateTranscriptLabels() {
           bcSpanText.textContent = ilcVideoPlayer.localize('Display Transcript');
+          bcTxtButton.setAttribute('title', ilcVideoPlayer.localize('Display Transcript'));
           bcRtnButton.textContent = ilcVideoPlayer.localize('Hide Transcript');
-        });
+          bcRtnButton.setAttribute('title', ilcVideoPlayer.localize('Hide Transcript'));
+        }
+
+        // Initial set + listener
+        updateTranscriptLabels();
+        ilcVideoPlayer.on('languagechange', updateTranscriptLabels);
 
         break; // Stop after first metadata track
       }
     }
   });
+});
