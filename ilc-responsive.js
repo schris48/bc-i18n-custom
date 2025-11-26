@@ -181,13 +181,27 @@
         console.log('[bcI18nOverride] Dictionary for', player.language(), ':', dict);
 
         // ✅ Dynamic update for custom transcript buttons
-        player.on('languagechange', function () {
+        function updateTranscriptLabels() {
           var btn = document.querySelector('.vjs-transcript-control .vjs-control-text');
           if (btn) btn.textContent = player.localize('Display Transcript');
 
           var hideBtn = document.querySelector('.bcRtnButton');
           if (hideBtn) hideBtn.textContent = player.localize('Hide Transcript');
+        }
+
+        // Update on language change
+        player.on('languagechange', updateTranscriptLabels);
+
+        // Also update when overlay opens (click on transcript button)
+        document.addEventListener('click', function (e) {
+          if (e.target.classList.contains('vjs-transcript-control') || e.target.closest('.vjs-transcript-control')) {
+            setTimeout(updateTranscriptLabels, 100);
+          }
         });
+
+        // Fallback: observe DOM for late injection
+        var observer = new MutationObserver(updateTranscriptLabels);
+        observer.observe(document.body, { childList: true, subtree: true });
 
       } catch (e) {
         console.warn('[bcI18nOverride] Error applying language:', e);
