@@ -7,6 +7,22 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
     pip_control.parentNode.removeChild(pip_control);
   }
 
+  // Variables for custom elements (declared outside so update function can access them)
+  var bcTxtButton, bcSpanText, bcRtnButton;
+
+  // ✅ Function to update labels dynamically based on current language
+  function updateTranscriptLabels() {
+    if (bcSpanText && bcTxtButton && bcRtnButton) {
+      bcSpanText.textContent = ilcVideoPlayer.localize('Display Transcript');
+      bcTxtButton.title = ilcVideoPlayer.localize('Display Transcript');
+      bcRtnButton.textContent = ilcVideoPlayer.localize('Hide Transcript');
+      bcRtnButton.title = ilcVideoPlayer.localize('Hide Transcript');
+    }
+  }
+
+  // ✅ Register listener early so it catches languagechange from bc-i18n-custom.js
+  ilcVideoPlayer.on('languagechange', updateTranscriptLabels);
+
   // Initialize player
   ilcVideoPlayer.on('loadstart', function() {
     var numTracks = ilcVideoPlayer.mediainfo.textTracks.length;
@@ -15,7 +31,7 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
       if (ilcVideoPlayer.mediainfo.textTracks[i].kind === "metadata") {
 
         // Create transcript button
-        var bcTxtButton = document.createElement('button');
+        bcTxtButton = document.createElement('button');
         bcTxtButton.className = 'vjs-transcript-control vjs-control vjs-button';
         bcTxtButton.setAttribute('style', 'z-index:1');
         bcTxtButton.setAttribute('type', 'button');
@@ -25,7 +41,7 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         bcSpanPlaceholder.setAttribute('aria-hidden', 'true');
         bcSpanPlaceholder.className = 'vjs-icon-placeholder';
 
-        var bcSpanText = document.createElement('span');
+        bcSpanText = document.createElement('span');
         bcSpanText.className = 'vjs-control-text';
         bcSpanText.setAttribute('aria-live', 'polite');
 
@@ -38,7 +54,7 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         var bcTextContainer = document.createElement('div');
         var bcTextContent = document.createElement('div');
         var bcTextFooter = document.createElement('div');
-        var bcRtnButton = document.createElement('button');
+        bcRtnButton = document.createElement('button');
 
         bcTextContainer.style.display = "none";
         bcTextContainer.setAttribute('aria-hidden', 'true');
@@ -91,21 +107,10 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
           bcTxtButton.focus();
         });
 
-        // ✅ Robust dynamic language update
-        function updateTranscriptLabels() {
-          bcSpanText.textContent = ilcVideoPlayer.localize('Display Transcript');
-          bcTxtButton.title = ilcVideoPlayer.localize('Display Transcript');
-          bcRtnButton.textContent = ilcVideoPlayer.localize('Hide Transcript');
-          bcRtnButton.title = ilcVideoPlayer.localize('Hide Transcript');
-        }
-
-        // Initial set
+        // ✅ Initial label set
         updateTranscriptLabels();
 
-        // Listen for language changes
-        ilcVideoPlayer.on('languagechange', updateTranscriptLabels);
-
-        // Force refresh after player is ready (covers initial override)
+        // ✅ Force refresh after player ready (covers timing issues)
         ilcVideoPlayer.ready(function() {
           updateTranscriptLabels();
         });
