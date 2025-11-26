@@ -177,3 +177,4 @@
   });
 
   return { name: PLUGIN_NAME, version: '1.2.0' };
+});
