@@ -1,7 +1,7 @@
 /* ilc-responsive.js
    - Creates a transcript toggle button and overlay.
-   - Robust i18n: resolves labels from player/global dictionaries with base-language fallback.
-   - Updates on languagechange and player ready.
+   - Preserves all original functionality.
+   - Adds debug checks for language and dictionary resolution.
 */
 
 videojs.registerPlugin('ilcResponsivePlugin', function() {
@@ -17,53 +17,53 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
   var bcTxtButton, bcSpanText, bcRtnButton, bcTextContainer, bcTextContent;
 
   // ---- i18n helpers ---------------------------------------------------------
-
   function getCurrentLang() {
-    // Returns normalized current language, e.g. "fr-ca" or "fr"
     var lang = (typeof ilcVideoPlayer.language === 'function') ? ilcVideoPlayer.language() : 'en';
     return String(lang || 'en').toLowerCase();
   }
 
   function getBaseLang(lang) {
-    // "fr-ca" -> "fr"
     lang = String(lang || '').toLowerCase();
     return lang.split('-')[0] || lang;
   }
 
   function getLanguageDict(lang) {
-    // Try player-level languages first, then fall back to global videojs languages
     var playerLangs = (ilcVideoPlayer.options_ && ilcVideoPlayer.options_.languages) || {};
     var globalLangs = (videojs.options && videojs.options.languages) || {};
-
-    // Prefer full tag, then base tag
     var base = getBaseLang(lang);
     return playerLangs[lang] || playerLangs[base] || globalLangs[lang] || globalLangs[base] || {};
   }
 
   function resolveLabel(key) {
-    // Resolve localized label with graceful fallback to English key string
     var lang = getCurrentLang();
     var dict = getLanguageDict(lang);
-    return (dict && dict[key]) || key;
+    var label = (dict && dict[key]) || key;
+    console.log('[ilcResponsivePlugin] resolveLabel:', key, '=>', label, '(lang:', lang, ')');
+    return label;
   }
 
   function updateTranscriptLabels() {
-    if (!bcSpanText || !bcTxtButton || !bcRtnButton) return;
-
+    console.log('[ilcResponsivePlugin] updateTranscriptLabels fired. Current lang:', getCurrentLang());
+    if (!bcSpanText || !bcTxtButton || !bcRtnButton) {
+      console.warn('[ilcResponsivePlugin] Elements not ready yet.');
+      return;
+    }
     var showLabel = resolveLabel('Display Transcript');
     var hideLabel = resolveLabel('Hide Transcript');
-
     bcSpanText.textContent = showLabel;
     bcTxtButton.title = showLabel;
     bcRtnButton.textContent = hideLabel;
     bcRtnButton.title = hideLabel;
+    console.log('[ilcResponsivePlugin] Labels updated:', showLabel, hideLabel);
   }
 
   // Listen early so we catch language changes triggered by bc-i18n-custom.js
-  ilcVideoPlayer.on('languagechange', updateTranscriptLabels);
+  ilcVideoPlayer.on('languagechange', function() {
+    console.log('[ilcResponsivePlugin] languagechange event detected.');
+    updateTranscriptLabels();
+  });
 
   // ---- UI creation ----------------------------------------------------------
-
   ilcVideoPlayer.on('loadstart', function() {
     var tracks = (ilcVideoPlayer.mediainfo && ilcVideoPlayer.mediainfo.textTracks) || [];
     var numTracks = tracks.length;
@@ -88,10 +88,9 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         bcTxtButton.appendChild(bcSpanPlaceholder);
         bcTxtButton.appendChild(bcSpanText);
 
-        // IMPORTANT: append without nuking the spacer component (avoid .html(...))
+        // Append without nuking spacer
         var spacerEl = ilcVideoPlayer.controlBar && ilcVideoPlayer.controlBar.customControlSpacer && ilcVideoPlayer.controlBar.customControlSpacer.el();
         if (spacerEl) {
-          // Remove prior instance if re-running on subsequent loadstart
           var existing = spacerEl.querySelector('.vjs-transcript-control');
           if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
           spacerEl.appendChild(bcTxtButton);
@@ -118,17 +117,15 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         bcTextContainer.appendChild(bcTextContent);
         bcTextContainer.appendChild(bcTextFooter);
 
-        // Insert immediately after the player root
         var playerRoot = ilcVideoPlayer.el();
         if (playerRoot && playerRoot.parentNode) {
           playerRoot.parentNode.insertBefore(bcTextContainer, playerRoot.nextSibling);
         }
 
-        // Load transcript text from metadata track src
+        // Load transcript text
         var url = tracks[i].src;
         if (url && window.$ && $.get) {
           $.get(url, function(data) {
-            // Extract everything after the first "-->" timestamp line (your original behavior)
             var idx = (data || '').indexOf("-->");
             var newdata = idx >= 0 ? data.slice(idx + 16) : data;
             bcTextContent.innerHTML = newdata;
@@ -185,15 +182,15 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         // Initial labels
         updateTranscriptLabels();
 
-        // After player is ready, update again (covers race with language override)
+        // After player ready, update again
         ilcVideoPlayer.ready(function() {
+          console.log('[ilcResponsivePlugin] Player ready, forcing label refresh.');
           updateTranscriptLabels();
-
-          // Also schedule a microtask update in case language settles one tick later
           setTimeout(updateTranscriptLabels, 0);
         });
 
-        break; // Stop after the first metadata track
+        break; // Stop after first metadata track
       }
     }
   });
+});
