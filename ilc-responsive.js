@@ -1,4 +1,3 @@
-
 /* ilc-responsive.js
    - Creates a transcript toggle button and overlay.
    - Robust i18n: resolves labels from player/global dictionaries with base-language fallback.
