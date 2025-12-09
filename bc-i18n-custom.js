@@ -1,4 +1,4 @@
-/*! bc-i18n-custom.js | Localization overrides + browser-language auto-select + caption-label localization */
+/*! bc-i18n-custom.js | Safe localization + auto-select + caption label localization */
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
     define(['video.js'], function (videojs) { return factory(videojs); });
@@ -9,11 +9,11 @@
   }
 }(this, function (videojs) {
   'use strict';
-  if (!videojs) { return; }
+  if (!videojs) return;
 
-  // ---------------------------------------------------------------------------
-  // 1) Language packs (override Video.js core + add custom transcript labels)
-  // ---------------------------------------------------------------------------
+  // -------------------------------
+  // 1) Language packs (strings only)
+  // -------------------------------
   videojs.addLanguage('de', {
     "Play": "Wiedergabe",
     "Pause": "Pause",
@@ -78,35 +78,33 @@
     "Hide Transcript": "トランスクリプトを隠す"
   });
 
-  // ---------------------------------------------------------------------------
-  // 2) Plugin: detect browser language, set the player language with fallback
-  // ---------------------------------------------------------------------------
+  // -----------------------------------------------
+  // 2) Plugin registration and browser language pick
+  // -----------------------------------------------
   var PLUGIN_NAME = 'bcI18nOverride';
   var register = videojs.registerPlugin || videojs.plugin;
-  if (!register) { return; }
+  if (!register) return;
 
   function getBrowserLocales() {
     var list = [];
-    if (Array.isArray(navigator.languages) && navigator.languages.length) {
-      list = navigator.languages.slice(0);
-    } else if (navigator.language) {
-      list = [navigator.language];
-    } else if (navigator.userLanguage) {
-      list = [navigator.userLanguage];
-    }
+    try {
+      if (Array.isArray(navigator.languages) && navigator.languages.length) {
+        list = navigator.languages.slice(0);
+      } else if (navigator.language) {
+        list = [navigator.language];
+      } else if (navigator.userLanguage) {
+        list = [navigator.userLanguage];
+      }
+    } catch (e) { /* ignore */ }
     return list.map(function (l) { return String(l).replace('_', '-').toLowerCase(); });
   }
 
   function expandLocaleCandidates(locale) {
     var parts = String(locale || '').split('-');
     if (!parts.length) return [];
-    var candidates = [];
-    candidates.push(parts.join('-'));
-    while (parts.length > 1) {
-      parts.pop();
-      candidates.push(parts.join('-'));
-    }
-    return candidates;
+    var out = [parts.join('-')];
+    while (parts.length > 1) { parts.pop(); out.push(parts.join('-')); }
+    return out;
   }
 
   function resolveSupportedLocale(supportedSet, locales) {
@@ -114,19 +112,17 @@
       var loc = locales[i];
       var candidates = expandLocaleCandidates(loc);
       for (var j = 0; j < candidates.length; j++) {
-        var c = candidates[j];
+        var c = candidates[j], base = c.split('-')[0];
         if (supportedSet.has(c)) return c;
-        var base = c.split('-')[0];
         if (supportedSet.has(base)) return base;
       }
     }
     return null;
   }
 
-  // ---------------------------------------------------------------------------
-  // 3) Localize caption/subtitle track labels
-  // ---------------------------------------------------------------------------
-  // Fallback names if Intl.DisplayNames isn't available
+  // ---------------------------------------------
+  // 3) Caption label localization (safe + DOM‑only)
+  // ---------------------------------------------
   var LANG_NAMES = {
     en: { en:'English', fr:'French', de:'German', es:'Spanish', ja:'Japanese' },
     de: { en:'Englisch', fr:'Französisch', de:'Deutsch', es:'Spanisch', ja:'Japanisch' },
@@ -136,24 +132,25 @@
   };
 
   function getUiLang(player, fallback) {
-    var lang = (typeof player.language === 'function') ? player.language() : fallback || 'en';
-    return String(lang || fallback || 'en').toLowerCase();
+    try {
+      var langFn = player && player.language;
+      var lang = (typeof langFn === 'function') ? langFn.call(player) : null;
+      return String(lang || fallback || 'en').toLowerCase();
+    } catch (e) { return String(fallback || 'en'); }
   }
 
   function resolveLanguageName(code, uiLang) {
     if (!code) return null;
     var base = String(code).toLowerCase().split('-')[0];
 
-    // Prefer Intl.DisplayNames if available
     if (typeof Intl !== 'undefined' && typeof Intl.DisplayNames === 'function') {
       try {
         var dn = new Intl.DisplayNames([uiLang], { type: 'language' });
-        var n = dn.of(base);
-        if (n) return n;
+        var name = dn.of(base);
+        if (name) return name;
       } catch (e) { /* ignore */ }
     }
 
-    // Fallback to our small dictionary
     var dict = LANG_NAMES[uiLang] || LANG_NAMES.en;
     return dict[base] || null;
   }
@@ -161,71 +158,60 @@
   function buildTrackLabelMap(player) {
     var map = {};
     var uiLang = getUiLang(player, 'en');
-    var list = player.textTracks();
+    var list;
+    try { list = player.textTracks(); } catch (e) { list = []; }
+    if (!list || !list.length) return map;
+
     for (var i = 0; i < list.length; i++) {
       var t = list[i];
-      if (t && (t.kind === 'captions' || t.kind === 'subtitles')) {
-        var code = (t.language || t.lang || '').toLowerCase();
-        var localized = resolveLanguageName(code, uiLang);
-        if (localized) {
-          var originalLabel = String(t.label || code || '').trim();
-          map[originalLabel] = localized;
-        }
-      }
+      if (!t || !(t.kind === 'captions' || t.kind === 'subtitles')) continue;
+      var code = (t.language || t.lang || '').toLowerCase();
+      var localized = resolveLanguageName(code, uiLang);
+      if (!localized) continue;
+      // Use the existing label text if present; otherwise fallback to the code
+      var originalLabel = String((t.label || '').trim() || code || '').trim();
+      if (originalLabel) map[originalLabel] = localized;
     }
     return map;
   }
 
-  function localizeTrackObjects(player) {
-    var uiLang = getUiLang(player, 'en');
-    var list = player.textTracks();
-    for (var i = 0; i < list.length; i++) {
-      var t = list[i];
-      if (t && (t.kind === 'captions' || t.kind === 'subtitles')) {
-        var code = (t.language || t.lang || '').toLowerCase();
-        var localized = resolveLanguageName(code, uiLang);
-        if (localized) {
-          try { t.label = localized; } catch (e) { /* some UAs make .label read-only */ }
-        }
-      }
-    }
-  }
+  function localizeCaptionMenuDom(player) {
+    var map = buildTrackLabelMap(player);
+    if (!map || !Object.keys(map).length) return;
 
-  function localizeCaptionMenuDom(player, map) {
-    var root = player && player.el();
-    if (!root || !map) return;
-    // Works across Brightcove variants: captions button or combined subs-caps
+    var root = player && player.el && player.el();
+    if (!root) return;
+
+    // Support both buttons across Brightcove variants
     var items = root.querySelectorAll(
       '.vjs-captions-button .vjs-menu-item .vjs-menu-item-text, ' +
       '.vjs-subs-caps-button .vjs-menu-item .vjs-menu-item-text'
     );
     if (!items || !items.length) return;
+
     for (var k = 0; k < items.length; k++) {
       var span = items[k];
       var current = (span.textContent || '').trim();
-      if (map[current]) {
-        span.textContent = map[current];
-      }
+      var localized = map[current];
+      if (localized) span.textContent = localized;
     }
   }
 
-  function updateCaptionLabels(player, cfg) {
-    try { localizeTrackObjects(player); }
-    catch (e) { if (cfg && cfg.debug) console.warn('[bcI18nOverride] label object update failed', e); }
-
+  function updateTranscriptLabels(player) {
     try {
-      var map = buildTrackLabelMap(player);
-      localizeCaptionMenuDom(player, map);
-    } catch (e) {
-      if (cfg && cfg.debug) console.warn('[bcI18nOverride] menu DOM update failed', e);
-    }
+      var btn = document.querySelector('.vjs-transcript-control .vjs-control-text');
+      if (btn) btn.textContent = player.localize('Display Transcript');
+      var hideBtn = document.querySelector('.bcRtnButton');
+      if (hideBtn) hideBtn.textContent = player.localize('Hide Transcript');
+    } catch (e) { /* ignore */ }
   }
 
-  // ---------------------------------------------------------------------------
-  // 4) Register plugin and wire events
-  // ---------------------------------------------------------------------------
+  // ---------------------------------------
+  // 4) Register plugin with defensive hooks
+  // ---------------------------------------
   register.call(videojs, PLUGIN_NAME, function pluginFn(options) {
     var player = this;
+
     var defaults = {
       supported: ['fr', 'es', 'de', 'ja'],
       fallback: 'en',
@@ -237,80 +223,83 @@
 
     player.ready(function () {
       try {
-        // Set/keep player language
-        var current = (typeof player.language === 'function') ? player.language() : null;
-        if (current) {
-          if (cfg.debug) console.info('[bcI18nOverride] keeping existing language:', current);
-        } else {
+        // 1) Choose/keep player language safely
+        var currentLang = (typeof player.language === 'function') ? player.language() : null;
+        if (!currentLang) {
           var browserLocales = getBrowserLocales();
           var best = resolveSupportedLocale(supportedSet, browserLocales);
           var chosen = best || fallback;
-          if (cfg.debug) console.info('[bcI18nOverride] browserLocales=', browserLocales, 'chosen=', chosen);
-          if (typeof player.language === 'function') {
-            player.language(chosen);
+          if (cfg.debug) console.info('[bcI18nOverride] language chosen=', chosen, 'browserLocales=', browserLocales);
+          if (typeof player.language === 'function') player.language(chosen);
+        } else if (cfg.debug) {
+          console.info('[bcI18nOverride] keeping existing language:', currentLang);
+        }
+
+        // 2) Merge our dictionary into player options (do NOT overwrite core)
+        try {
+          var uiLang = getUiLang(player, fallback);
+          var dict = videojs.options && (videojs.options.languages[uiLang] || videojs.options.languages[uiLang.split('-')[0]]);
+          if (dict) {
+            player.options_ = player.options_ || {};
+            player.options_.languages = player.options_.languages || {};
+            var existing = player.options_.languages[uiLang] || {};
+            player.options_.languages[uiLang] = Object.assign({}, existing, dict);
+            if (cfg.debug) console.info('[bcI18nOverride] injected dict for', uiLang);
           }
+        } catch (e) {
+          if (cfg.debug) console.warn('[bcI18nOverride] dictionary injection skipped:', e);
         }
 
-        // Inject our dictionary for the chosen language (to support custom keys)
-        var lang = getUiLang(player, fallback);
-        var dict = videojs.options.languages[lang] || videojs.options.languages[lang.split('-')[0]];
-        if (dict) {
-          player.options_.languages = player.options_.languages || {};
-          player.options_.languages[lang] = Object.assign({}, player.options_.languages[lang] || {}, dict);
-          if (cfg.debug) console.info('[bcI18nOverride] injected dict for', lang, dict);
+        // 3) Only trigger languagechange if we set language just now
+        if (!currentLang && typeof player.trigger === 'function') {
+          player.trigger('languagechange');
         }
 
-        // Trigger languagechange so dependent components refresh
-        player.trigger('languagechange');
-
-        // Transcript button labels (custom)
-        function updateTranscriptLabels() {
-          var btn = document.querySelector('.vjs-transcript-control .vjs-control-text');
-          if (btn) btn.textContent = player.localize('Display Transcript');
-          var hideBtn = document.querySelector('.bcRtnButton');
-          if (hideBtn) hideBtn.textContent = player.localize('Hide Transcript');
-        }
-
-        // Update on language change
-        player.on('languagechange', function () {
-          updateTranscriptLabels();
-          updateCaptionLabels(player, cfg);
-        });
-
-        // Update after metadata (tracks available)
+        // 4) Wire events AFTER metadata to avoid empty track list
         player.on('loadedmetadata', function () {
-          updateTranscriptLabels();
-          updateCaptionLabels(player, cfg);
+          updateTranscriptLabels(player);
+          localizeCaptionMenuDom(player);
         });
 
-        // Update on text track changes (selection/availability)
+        // 5) Refresh on language & track changes
+        player.on('languagechange', function () {
+          updateTranscriptLabels(player);
+          localizeCaptionMenuDom(player);
+        });
         player.on('texttrackchange', function () {
-          updateCaptionLabels(player, cfg);
+          localizeCaptionMenuDom(player);
         });
 
-        // Update when menus open (captions/transcript)
-        document.addEventListener('click', function (e) {
+        // 6) Patch labels when the menu is opened (variant-safe)
+        player.el().addEventListener('click', function (e) {
           var btn = e.target.closest('.vjs-captions-button, .vjs-subs-caps-button, .vjs-transcript-control');
-          if (btn) {
-            setTimeout(function () {
-              updateTranscriptLabels();
-              updateCaptionLabels(player, cfg);
-            }, 100);
-          }
+          if (btn) setTimeout(function () {
+            updateTranscriptLabels(player);
+            localizeCaptionMenuDom(player);
+          }, 100);
         });
 
-        // Fallback: observe DOM for late injection
-        var observer = new MutationObserver(function () {
-          updateTranscriptLabels();
-          updateCaptionLabels(player, cfg);
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
+        // 7) Conservative MutationObserver: only on player subtree
+        try {
+          var root = player.el();
+          if (root && typeof MutationObserver !== 'undefined') {
+            var observer = new MutationObserver(function () {
+              // Avoid heavy work: only try if tracks exist
+              var tracks = player.textTracks && player.textTracks();
+              if (tracks && tracks.length) {
+                updateTranscriptLabels(player);
+                localizeCaptionMenuDom(player);
+              }
+            });
+            observer.observe(root, { childList: true, subtree: true });
+          }
+        } catch (e) { /* ignore */ }
 
       } catch (e) {
-        console.warn('[bcI18nOverride] error applying language', e);
+        console.warn('[bcI18nOverride] error initializing plugin', e);
       }
     });
   });
 
-  return { name: PLUGIN_NAME, version: '1.3.0' };
+  return { name: PLUGIN_NAME, version: '1.3.1-safe' };
 }));
