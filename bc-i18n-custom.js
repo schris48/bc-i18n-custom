@@ -1,4 +1,3 @@
-
 /*! bc-i18n-custom.js | Localization overrides + browser-language auto-select + caption-label localization */
 (function (root, factory) {
   if (typeof define === 'function' && define.amd) {
