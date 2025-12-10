@@ -1,3 +1,4 @@
+
 /*! bc-i18n-custom.js | Brightcove/Video.js i18n + caption label localization (global-only, safe) */
 (function (videojs) {
   'use strict';
@@ -121,6 +122,23 @@
     } catch (e) { return String(fallback || 'en'); }
   }
 
+  // URL/?lang helper
+  function getUrlLang(win) {
+    try {
+      var params = new URLSearchParams((win.location && win.location.search) || '');
+      var lang = params.get('lang') || params.get('locale') || '';
+      return (lang || '').toLowerCase();
+    } catch (e) { return ''; }
+  }
+
+  // <html lang="..."> helper
+  function getHtmlLang(doc) {
+    try {
+      var lang = (doc.documentElement && doc.documentElement.lang) || '';
+      return (lang || '').toLowerCase();
+    } catch (e) { return ''; }
+  }
+
   // `Intl.DisplayNames` preferred for live language names; fallback keeps your 5 languages covered
   var LANG_NAMES = {
     en: { en:'English', fr:'French', de:'German', es:'Spanish', ja:'Japanese' },
@@ -210,6 +228,7 @@
     var defaults = {
       supported: ['fr', 'es', 'de', 'ja'],
       fallback: 'en',
+      force: false,   // NEW: override even if Brightcove pre-set language
       debug: true
     };
     var cfg = Object.assign({}, defaults, options || {});
@@ -224,18 +243,51 @@
       try {
         // A) Choose player UI language (without touching player.options_)
         var currentLang = (typeof player.language === 'function') ? player.language() : null;
-        if (!currentLang) {
-          var browserLocales = getBrowserLocales();
-          var best = resolveSupportedLocale(supportedSet, browserLocales);
-          var chosen = best || fallback;
-          if (cfg.debug && console && console.info) {
-            console.info('[bc-i18n] language=', chosen, 'browserLocales=', browserLocales);
+
+        // Gather candidates: URL → <html lang> → browser → fallback
+        var urlLang = getUrlLang(window);
+        var htmlLang = getHtmlLang(document);
+        var browserLocales = getBrowserLocales();
+
+        function pickLang() {
+          // 1) URL param (exact match or base)
+          if (urlLang) {
+            var urlBase = urlLang.split('-')[0];
+            if (supportedSet.has(urlLang)) return urlLang;
+            if (supportedSet.has(urlBase)) return urlBase;
           }
-          if (typeof player.language === 'function') player.language(chosen);
-          // Only trigger if we set it now
-          if (typeof player.trigger === 'function') player.trigger('languagechange');
+          // 2) <html lang> (exact match or base)
+          if (htmlLang) {
+            var htmlBase = htmlLang.split('-')[0];
+            if (supportedSet.has(htmlLang)) return htmlLang;
+            if (supportedSet.has(htmlBase)) return htmlBase;
+          }
+          // 3) Browser locales
+          var best = resolveSupportedLocale(supportedSet, browserLocales);
+          if (best) return best;
+          // 4) Fallback
+          return fallback;
+        }
+
+        var chosen = pickLang();
+
+        if (cfg.debug && console && console.info) {
+          console.info('[bc-i18n] current=', currentLang, 'chosen=', chosen, 'urlLang=', urlLang, 'htmlLang=', htmlLang, 'browserLocales=', browserLocales);
+        }
+
+        // Apply if forced OR if not yet set OR if different
+        var shouldApply =
+          cfg.force ||
+          !currentLang ||
+          (String(currentLang).toLowerCase() !== String(chosen).toLowerCase());
+
+        if (shouldApply && typeof player.language === 'function') {
+          player.language(chosen);
+          if (typeof player.trigger === 'function') {
+            player.trigger('languagechange');
+          }
         } else if (cfg.debug && console && console.info) {
-          console.info('[bc-i18n] keeping language=', currentLang);
+          console.info('[bc-i18n] language unchanged');
         }
 
         // B) Wire events—only after metadata is available (tracks exist)
