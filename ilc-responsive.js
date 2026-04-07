@@ -127,17 +127,20 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
               .map(function(line) {
                 var decoded = decodeHtml(line.trim());
             
-                // Convert <br> tags to newlines
-                decoded = decoded.replace(/<br\s*\/?>/gi, '\n');
+                // 1. Normalize paragraph breaks FIRST (2+ <br>)
+                decoded = decoded.replace(/(<br\s*\/?>\s*){2,}/gi, '\n\n');
             
-                return decoded;
+                // 2. Convert remaining single <br> to spaces
+                decoded = decoded.replace(/<br\s*\/?>/gi, ' ');
+            
+                return decoded.trim();
               })
-              .join('\n')               // join cues, not lines
-              .replace(/\n{3,}/g, '\n\n') // collapse 3+ line breaks to paragraph break
+              .join('\n')                 // separate logical transcript segments
+              .replace(/\n{3,}/g, '\n\n') // safety: collapse excess breaks
               .trim();
             
             bcTextContent.textContent = newdata;
-          
+
             console.log(
               '[ilcResponsivePlugin] transcript content loaded (length=',
               newdata.length,
