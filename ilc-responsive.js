@@ -3,7 +3,12 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
 
   // --- DEBUG: plugin loaded
   try {
-    console.log('[ilcResponsivePlugin] init: player id=', ilcVideoPlayer.id(), 'language=', (ilcVideoPlayer.language && ilcVideoPlayer.language()) || '(n/a)');
+    console.log(
+      '[ilcResponsivePlugin] init: player id=',
+      ilcVideoPlayer.id(),
+      'language=',
+      (ilcVideoPlayer.language && ilcVideoPlayer.language()) || '(n/a)'
+    );
   } catch (e) {
     console.warn('[ilcResponsivePlugin] init: error logging player id/language', e);
   }
@@ -21,7 +26,15 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
   ilcVideoPlayer.on('loadstart', function() {
     console.log('[ilcResponsivePlugin] loadstart fired');
 
-    var numTracks = ilcVideoPlayer.mediainfo && ilcVideoPlayer.mediainfo.textTracks ? ilcVideoPlayer.mediainfo.textTracks.length : 0;
+    // flag to track whether a metadata text track is found
+    var foundMetadataTrack = false;
+
+    var numTracks =
+      ilcVideoPlayer.mediainfo &&
+      ilcVideoPlayer.mediainfo.textTracks
+        ? ilcVideoPlayer.mediainfo.textTracks.length
+        : 0;
+
     console.log('[ilcResponsivePlugin] textTracks count=', numTracks);
 
     for (var i = 0; i < numTracks; i++) {
@@ -29,6 +42,10 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
       console.log('[ilcResponsivePlugin] inspecting track', i, 'kind=', track && track.kind);
 
       if (track && track.kind === "metadata") {
+
+        // mark that a metadata track exists
+        foundMetadataTrack = true;
+
         console.log('[ilcResponsivePlugin] using metadata track at index', i);
 
         // Create transcript button
@@ -65,7 +82,10 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
             ilcVideoPlayer.controlBar.el().appendChild(bcTxtButton);
           }
         } catch (e) {
-          console.warn('[ilcResponsivePlugin] error inserting transcript button; falling back to controlBar.appendChild', e);
+          console.warn(
+            '[ilcResponsivePlugin] error inserting transcript button; falling back to controlBar.appendChild',
+            e
+          );
           ilcVideoPlayer.controlBar.el().appendChild(bcTxtButton);
         }
 
@@ -97,7 +117,6 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         $(bcTextContainer).insertAfter(ilcVideoPlayer.el());
         console.log('[ilcResponsivePlugin] transcript container inserted after player');
 
-        
         function decodeHtml(str) {
           var txt = document.createElement('textarea');
           txt.innerHTML = str;
@@ -107,12 +126,12 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         // Load transcript text
         var url = track.src;
         console.log('[ilcResponsivePlugin] fetching transcript from', url);
-        $.get(url, function(data) {
 
+        $.get(url, function(data) {
           try {
             // Split VTT into lines
             var lines = data.split(/\r?\n/);
-          
+
             // Remove WEBVTT header, timestamp map, cue timing lines, and blanks
             var transcriptLines = lines.filter(function(line) {
               line = line.trim();
@@ -126,19 +145,19 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
             var newdata = transcriptLines
               .map(function(line) {
                 var decoded = decodeHtml(line.trim());
-            
+
                 // 1. Normalize paragraph breaks FIRST (2+ <br>)
                 decoded = decoded.replace(/(<br\s*\/?>\s*){2,}/gi, '\n\n');
-            
+
                 // 2. Convert remaining single <br> to spaces
                 decoded = decoded.replace(/<br\s*\/?>/gi, ' ');
-            
+
                 return decoded.trim();
               })
               .join('\n')                 // separate logical transcript segments
               .replace(/\n{3,}/g, '\n\n') // safety: collapse excess breaks
               .trim();
-            
+
             bcTextContent.textContent = newdata;
 
             console.log(
@@ -146,10 +165,10 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
               newdata.length,
               ')'
             );
-        } catch (e) {
-          console.warn('[ilcResponsivePlugin] error parsing transcript content', e);
-          bcTextContent.textContent = data; // fallback: raw
-        }
+          } catch (e) {
+            console.warn('[ilcResponsivePlugin] error parsing transcript content', e);
+            bcTextContent.textContent = data; // fallback: raw
+          }
         });
 
         // Hide transcript button in fullscreen
@@ -214,7 +233,10 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         // Initial set + listener
         updateTranscriptLabels();
         ilcVideoPlayer.on('languagechange', function() {
-          console.log('[ilcResponsivePlugin] languagechange event received; language=', (ilcVideoPlayer.language && ilcVideoPlayer.language()) || '(n/a)');
+          console.log(
+            '[ilcResponsivePlugin] languagechange event received; language=',
+            (ilcVideoPlayer.language && ilcVideoPlayer.language()) || '(n/a)'
+          );
           // Delay a tick in case DOM was (re)created by Brightcove
           setTimeout(updateTranscriptLabels, 0);
         });
@@ -228,13 +250,19 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
               var t = muts[k].target;
               if (!t) continue;
               if (t === bcTextContainer || t === ilcVideoPlayer.controlBar.el()) {
-                needsUpdate = true; break;
+                needsUpdate = true;
+                break;
               }
               // also check additions under body for our classnames
               var added = muts[k].addedNodes || [];
               for (var a = 0; a < added.length; a++) {
-                if (added[a].querySelector && (added[a].querySelector('.vjs-transcript-control') || added[a].querySelector('.bcRtnButton'))) {
-                  needsUpdate = true; break;
+                if (
+                  added[a].querySelector &&
+                  (added[a].querySelector('.vjs-transcript-control') ||
+                   added[a].querySelector('.bcRtnButton'))
+                ) {
+                  needsUpdate = true;
+                  break;
                 }
               }
               if (needsUpdate) break;
@@ -260,6 +288,11 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
 
         break; // Stop after first metadata track
       }
+    }
+
+    // debug log if no metadata track was available
+    if (!foundMetadataTrack) {
+      console.log('[ilcResponsivePlugin] no metadata text track found; transcript button not rendered');
     }
   });
 });
