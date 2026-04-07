@@ -127,12 +127,14 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
               .map(function(line) {
                 var decoded = decodeHtml(line.trim());
             
-                // Convert <br> tags into actual line breaks
+                // Convert <br> tags to newlines
                 decoded = decoded.replace(/<br\s*\/?>/gi, '\n');
             
                 return decoded;
               })
-              .join('\n');
+              .join('\n')               // join cues, not lines
+              .replace(/\n{3,}/g, '\n\n') // collapse 3+ line breaks to paragraph break
+              .trim();
             
             bcTextContent.textContent = newdata;
           
