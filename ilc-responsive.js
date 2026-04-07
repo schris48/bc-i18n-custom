@@ -132,6 +132,7 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
           console.warn('[ilcResponsivePlugin] error parsing transcript content', e);
           bcTextContent.textContent = data; // fallback: raw
         }
+        });
 
         // Hide transcript button in fullscreen
         ilcVideoPlayer.on('fullscreenchange', function() {
