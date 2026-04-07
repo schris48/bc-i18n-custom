@@ -101,17 +101,37 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         var url = track.src;
         console.log('[ilcResponsivePlugin] fetching transcript from', url);
         $.get(url, function(data) {
-          try {
-            var newdata = data.slice(data.indexOf("-->") + 16);
-            bcTextContent.innerHTML = newdata;
-            console.log('[ilcResponsivePlugin] transcript content loaded (length=', (newdata && newdata.length) || 0, ')');
-          } catch (e) {
-            console.warn('[ilcResponsivePlugin] error parsing transcript content', e);
-            bcTextContent.textContent = data; // fallback: raw
-          }
-        }).fail(function(xhr, status, err) {
-          console.warn('[ilcResponsivePlugin] failed to load transcript', status, err);
-        });
+
+try {
+  // Split VTT into lines
+  var lines = data.split(/\r?\n/);
+
+  // Remove WEBVTT header, timestamp map, cue timing lines, and blanks
+  var transcriptLines = lines.filter(function(line) {
+    line = line.trim();
+    if (!line) return false;
+    if (line === 'WEBVTT') return false;
+    if (line.includes('X-TIMESTAMP-MAP=')) return false;
+    if (line.includes('-->')) return false;
+    return true;
+  });
+
+  // Trim each line to avoid double spacing, then join
+  var newdata = transcriptLines
+    .map(function(line) { return line.trim(); })
+    .join(' ');
+
+  bcTextContent.textContent = newdata;
+
+  console.log(
+    '[ilcResponsivePlugin] transcript content loaded (length=',
+    newdata.length,
+    ')'
+  );
+} catch (e) {
+  console.warn('[ilcResponsivePlugin] error parsing transcript content', e);
+  bcTextContent.textContent = data; // fallback: raw
+}
 
         // Hide transcript button in fullscreen
         ilcVideoPlayer.on('fullscreenchange', function() {
