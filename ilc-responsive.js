@@ -97,6 +97,13 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         $(bcTextContainer).insertAfter(ilcVideoPlayer.el());
         console.log('[ilcResponsivePlugin] transcript container inserted after player');
 
+        
+        function decodeHtml(str) {
+          var txt = document.createElement('textarea');
+          txt.innerHTML = str;
+          return txt.value;
+        }
+
         // Load transcript text
         var url = track.src;
         console.log('[ilcResponsivePlugin] fetching transcript from', url);
@@ -115,12 +122,18 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
               if (line.includes('-->')) return false;
               return true;
             });
-          
-            // Trim each line to avoid double spacing, then join
+
             var newdata = transcriptLines
-              .map(function(line) { return line.trim(); })
-              .join(' ');
-          
+              .map(function(line) {
+                var decoded = decodeHtml(line.trim());
+            
+                // Convert <br> tags into actual line breaks
+                decoded = decoded.replace(/<br\s*\/?>/gi, '\n');
+            
+                return decoded;
+              })
+              .join('\n');
+            
             bcTextContent.textContent = newdata;
           
             console.log(
