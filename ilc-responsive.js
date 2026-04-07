@@ -102,36 +102,36 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         console.log('[ilcResponsivePlugin] fetching transcript from', url);
         $.get(url, function(data) {
 
-try {
-  // Split VTT into lines
-  var lines = data.split(/\r?\n/);
-
-  // Remove WEBVTT header, timestamp map, cue timing lines, and blanks
-  var transcriptLines = lines.filter(function(line) {
-    line = line.trim();
-    if (!line) return false;
-    if (line === 'WEBVTT') return false;
-    if (line.includes('X-TIMESTAMP-MAP=')) return false;
-    if (line.includes('-->')) return false;
-    return true;
-  });
-
-  // Trim each line to avoid double spacing, then join
-  var newdata = transcriptLines
-    .map(function(line) { return line.trim(); })
-    .join(' ');
-
-  bcTextContent.textContent = newdata;
-
-  console.log(
-    '[ilcResponsivePlugin] transcript content loaded (length=',
-    newdata.length,
-    ')'
-  );
-} catch (e) {
-  console.warn('[ilcResponsivePlugin] error parsing transcript content', e);
-  bcTextContent.textContent = data; // fallback: raw
-}
+          try {
+            // Split VTT into lines
+            var lines = data.split(/\r?\n/);
+          
+            // Remove WEBVTT header, timestamp map, cue timing lines, and blanks
+            var transcriptLines = lines.filter(function(line) {
+              line = line.trim();
+              if (!line) return false;
+              if (line === 'WEBVTT') return false;
+              if (line.includes('X-TIMESTAMP-MAP=')) return false;
+              if (line.includes('-->')) return false;
+              return true;
+            });
+          
+            // Trim each line to avoid double spacing, then join
+            var newdata = transcriptLines
+              .map(function(line) { return line.trim(); })
+              .join(' ');
+          
+            bcTextContent.textContent = newdata;
+          
+            console.log(
+              '[ilcResponsivePlugin] transcript content loaded (length=',
+              newdata.length,
+              ')'
+            );
+        } catch (e) {
+          console.warn('[ilcResponsivePlugin] error parsing transcript content', e);
+          bcTextContent.textContent = data; // fallback: raw
+        }
 
         // Hide transcript button in fullscreen
         ilcVideoPlayer.on('fullscreenchange', function() {
