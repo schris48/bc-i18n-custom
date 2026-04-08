@@ -26,7 +26,6 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
   ilcVideoPlayer.on('loadstart', function() {
     console.log('[ilcResponsivePlugin] loadstart fired');
 
-
     // Guard: require a metadata TextTrack to exist
     var html5TextTracks = ilcVideoPlayer.textTracks();
     var metadataTrack = null;
@@ -48,7 +47,6 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
     if (!metadataTrack.cues || metadataTrack.cues.length === 0) {
       console.warn('[ilcResponsivePlugin] metadata TextTrack present but cues not loaded (possibly blocked)');
     }
-
 
     // ADDED: flag to track whether a metadata text track is found
     var foundMetadataTrack = false;
