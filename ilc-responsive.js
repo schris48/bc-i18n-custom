@@ -26,8 +26,6 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
   ilcVideoPlayer.on('loadstart', function() {
     console.log('[ilcResponsivePlugin] loadstart fired');
 
-
-
     // Guard: only proceed if a REAL transcript metadata TextTrack exists
     var html5TextTracks = ilcVideoPlayer.textTracks();
     var metadataTrackWithCues = null;
@@ -59,8 +57,6 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
     
       return;
     }
-
-
 
     // ADDED: flag to track whether a metadata text track is found
     var foundMetadataTrack = false;
