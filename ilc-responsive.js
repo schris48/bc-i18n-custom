@@ -27,24 +27,39 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
     console.log('[ilcResponsivePlugin] loadstart fired');
 
 
+
     // Guard: only proceed if a REAL transcript metadata TextTrack exists
-    var hasRealMetadataTextTrack = false;
     var html5TextTracks = ilcVideoPlayer.textTracks();
+    var metadataTrackWithCues = null;
     
     for (var t = 0; t < html5TextTracks.length; t++) {
       var tt = html5TextTracks[t];
-      if (tt.kind === 'metadata' && tt.cues && tt.cues.length > 0) {
-        hasRealMetadataTextTrack = true;
+      if (tt.kind === 'metadata') {
+        metadataTrackWithCues = tt;
         break;
       }
     }
     
-    if (!hasRealMetadataTextTrack) {
-      console.log(
-        '[ilcResponsivePlugin] no metadata TextTrack with cues found; transcript UI will not be created'
-      );
+    if (!metadataTrackWithCues) {
+      console.log('[ilcResponsivePlugin] no metadata TextTrack present at all');
       return;
     }
+    
+    // If cues are not ready yet, wait once
+    if (!metadataTrackWithCues.cues || metadataTrackWithCues.cues.length === 0) {
+      console.log('[ilcResponsivePlugin] metadata TextTrack found but cues not loaded yet; waiting');
+    
+      metadataTrackWithCues.addEventListener('cuechange', function onCuesReady() {
+        if (metadataTrackWithCues.cues && metadataTrackWithCues.cues.length > 0) {
+          metadataTrackWithCues.removeEventListener('cuechange', onCuesReady);
+          console.log('[ilcResponsivePlugin] metadata cues now available; re-running transcript init');
+          ilcVideoPlayer.trigger('loadstart');
+        }
+      });
+    
+      return;
+    }
+
 
 
     // ADDED: flag to track whether a metadata text track is found
