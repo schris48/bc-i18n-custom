@@ -26,37 +26,29 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
   ilcVideoPlayer.on('loadstart', function() {
     console.log('[ilcResponsivePlugin] loadstart fired');
 
-    // Guard: only proceed if a REAL transcript metadata TextTrack exists
+
+    // Guard: require a metadata TextTrack to exist
     var html5TextTracks = ilcVideoPlayer.textTracks();
-    var metadataTrackWithCues = null;
+    var metadataTrack = null;
     
     for (var t = 0; t < html5TextTracks.length; t++) {
-      var tt = html5TextTracks[t];
-      if (tt.kind === 'metadata') {
-        metadataTrackWithCues = tt;
+      if (html5TextTracks[t].kind === 'metadata') {
+        metadataTrack = html5TextTracks[t];
         break;
       }
     }
     
-    if (!metadataTrackWithCues) {
-      console.log('[ilcResponsivePlugin] no metadata TextTrack present at all');
+    if (!metadataTrack) {
+      console.log('[ilcResponsivePlugin] no metadata TextTrack found; transcript UI will not be created');
       return;
     }
     
-    // If cues are not ready yet, wait once
-    if (!metadataTrackWithCues.cues || metadataTrackWithCues.cues.length === 0) {
-      console.log('[ilcResponsivePlugin] metadata TextTrack found but cues not loaded yet; waiting');
-    
-      metadataTrackWithCues.addEventListener('cuechange', function onCuesReady() {
-        if (metadataTrackWithCues.cues && metadataTrackWithCues.cues.length > 0) {
-          metadataTrackWithCues.removeEventListener('cuechange', onCuesReady);
-          console.log('[ilcResponsivePlugin] metadata cues now available; re-running transcript init');
-          ilcVideoPlayer.trigger('loadstart');
-        }
-      });
-    
-      return;
+    // Do NOT return just because cues are empty
+    // Just log it
+    if (!metadataTrack.cues || metadataTrack.cues.length === 0) {
+      console.warn('[ilcResponsivePlugin] metadata TextTrack present but cues not loaded (possibly blocked)');
     }
+
 
     // ADDED: flag to track whether a metadata text track is found
     var foundMetadataTrack = false;
