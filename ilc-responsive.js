@@ -26,24 +26,28 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
   ilcVideoPlayer.on('loadstart', function() {
     console.log('[ilcResponsivePlugin] loadstart fired');
 
-    // ✅ Guard: only proceed if an actual HTML5 metadata TextTrack exists.
-    // Brightcove mediainfo.textTracks may include internal helper tracks.
+
+    // Guard: only proceed if a REAL transcript metadata TextTrack exists
     var hasRealMetadataTextTrack = false;
     var html5TextTracks = ilcVideoPlayer.textTracks();
-
+    
     for (var t = 0; t < html5TextTracks.length; t++) {
-      if (html5TextTracks[t].kind === 'metadata') {
+      var tt = html5TextTracks[t];
+      if (tt.kind === 'metadata' && tt.cues && tt.cues.length > 0) {
         hasRealMetadataTextTrack = true;
         break;
       }
     }
-
+    
     if (!hasRealMetadataTextTrack) {
-      console.log('[ilcResponsivePlugin] no HTML5 metadata TextTrack found; transcript UI will not be created');
+      console.log(
+        '[ilcResponsivePlugin] no metadata TextTrack with cues found; transcript UI will not be created'
+      );
       return;
     }
 
-    // ✅ ADDED: flag to track whether a metadata text track is found
+
+    // ADDED: flag to track whether a metadata text track is found
     var foundMetadataTrack = false;
 
     var numTracks =
@@ -60,7 +64,7 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
 
       if (track && track.kind === "metadata") {
 
-        // ✅ ADDED: mark that a metadata track exists
+        //  ADDED: mark that a metadata track exists
         foundMetadataTrack = true;
 
         console.log('[ilcResponsivePlugin] using metadata track at index', i);
@@ -225,7 +229,7 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
           bcTxtButton.focus();
         });
 
-        // ✅ Dynamic language update logic (resilient)
+        // Dynamic language update logic (resilient)
         function updateTranscriptLabels() {
           try {
             var displayLabel = ilcVideoPlayer.localize('Display Transcript');
@@ -307,7 +311,7 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
       }
     }
 
-    // ✅ ADDED: debug log if no metadata track was available
+    // ADDED: debug log if no metadata track was available
     if (!foundMetadataTrack) {
       console.log('[ilcResponsivePlugin] no metadata text track found; transcript button not rendered');
     }
