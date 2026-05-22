@@ -140,9 +140,20 @@ videojs.registerPlugin('ilcResponsivePlugin', function() {
         console.log('[ilcResponsivePlugin] transcript container inserted after player');
 
         function decodeHtml(str) {
+          var previous;
+          var current = str;
           var txt = document.createElement('textarea');
-          txt.innerHTML = str;
-          return txt.value;
+          var maxPasses = 5; // prevents accidental infinite loops
+          var pass = 0;
+        
+          do {
+            previous = current;
+            txt.innerHTML = previous;
+            current = txt.value;
+            pass++;
+          } while (current !== previous && pass < maxPasses);
+        
+          return current;
         }
 
         // Load transcript text
