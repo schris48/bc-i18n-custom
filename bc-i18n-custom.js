@@ -101,14 +101,20 @@
     return out;
   }
 
-  function resolveSupportedLocale(supportedSet, locales) {
+  function resolveSupportedLocale(supportedSet, locales, fallback) {
     for (var i = 0; i < locales.length; i++) {
       var loc = locales[i];
+      var base = String(loc).split('-')[0];
+  
+      // ← NEW: if we hit the fallback language before finding a supported one,
+      // stop scanning. The user's primary intent is the fallback language.
+      if (fallback && base === String(fallback).toLowerCase()) return null;
+  
       var candidates = expandLocaleCandidates(loc);
       for (var j = 0; j < candidates.length; j++) {
-        var c = candidates[j], base = c.split('-')[0];
+        var c = candidates[j], b = c.split('-')[0];
         if (supportedSet.has(c)) return c;
-        if (supportedSet.has(base)) return base;
+        if (supportedSet.has(b)) return b;
       }
     }
     return null;
@@ -263,7 +269,7 @@
             if (supportedSet.has(htmlBase)) return htmlBase;
           }
           // 3) Browser locales
-          var best = resolveSupportedLocale(supportedSet, browserLocales);
+          var best = resolveSupportedLocale(supportedSet, browserLocales, fallback);
           if (best) return best;
           // 4) Fallback
           return fallback;
